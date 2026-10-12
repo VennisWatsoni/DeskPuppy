@@ -1,0 +1,28 @@
+# STM32 DeskPuppy
+# 忽略build下全部，只保留 build/Release/DeskPuppy.elf
+/build/
+
+# 根目录cmake文件夹忽略
+/cmake/
+
+# CubeMX临时文件
+.mxproject
+*.ioc.backup
+
+# CMake/Ninja缓存
+**/CMakeCache.txt
+**/CMakeFiles/
+**/.cmake/
+**/cmake_install.cmake
+**/compile_commands.json
+**/build.ninja
+**/.ninja_deps
+**/.ninja_log
+
+# 系统、编辑器文件
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+*.log
+*.bak
