@@ -1,18 +1,15 @@
-/build/Release/**
-!/build/Release/*.elf
-/build/Release/*.map
-/build/Release/*.hex
-/build/Release/*.bin
-**/CMakeCache.txt
-**/CMakeFiles/
-**/.cmake/
-**/cmake_install.cmake
-**/compile_commands.json
-**/build.ninja
-**/.ninja*
-.mxproject
-*.ioc.backup
-__pycache__/
-*.pyc
-Thumbs.db
-.DS_Store
+# Project Name：DeskPuppy
+### function 1: pwm 
+pwm input channl
+PA4 OUT_PP PULL DOWN HIGHTSPEED 0
+PA5 OUT_PP PULL DOWN HIGHTSPEED 1
+PA6 OUT_PP PULL DOWN HIGHTSPEED 2 反向
+PA7 OUT_PP PULL DOWN HIGHTSPEED 3 反向
+左上：0 右上：2
+左下：1 右下：3
+### function 2: 0.96 inch OLED
+OLED_SCL    PA15
+OLED_SDA    PB3
+OLED_DC     PB5
+OLED_RES    PB4
+

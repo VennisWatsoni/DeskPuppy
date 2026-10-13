@@ -4,6 +4,7 @@
 
 # 根目录cmake文件夹忽略
 /cmake/
+/.codegraph/
 
 # CubeMX临时文件
 .mxproject

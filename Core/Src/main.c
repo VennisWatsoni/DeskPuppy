@@ -21,12 +21,17 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "pose.h"
+#include "i2c.h"
+#include "oled.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+TIM_HandleTypeDef htim2;
+static uint16_t servo_tick = 0;
+static uint16_t servo_pw[4] = {15,15,15,15};
+SoftIIC_HandleTypeDef si2c_OLED = {OLED_SDA_GPIO_Port, OLED_SDA_Pin, OLED_SCL_GPIO_Port, OLED_SCL_Pin};
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -42,6 +47,8 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 
+TIM_HandleTypeDef htim2;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -50,13 +57,73 @@ ADC_HandleTypeDef hadc1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void PWM_Init(void)
+{
+	MX_GPIO_Init();
+	MX_TIM2_Init();
+	HAL_TIM_Base_Start_IT(&htim2);
+}
+void Servo_SetAngle(uint8_t ch, uint8_t angle)
+{
+  if(ch > 3) return;
+  if(angle > 180) angle = 180;
 
+  // CH2 CH3 右侧通道，角度取反 180-angle
+  if(ch == 2 || ch ==3)
+  {
+    angle = 180 - angle;
+  }
+
+  uint32_t mask = __get_PRIMASK();
+  __disable_irq();
+  servo_pw[ch] = 5 + ((uint32_t)angle * 20)/180;
+  __set_PRIMASK(mask);
+}
+
+
+//定时器溢出回调
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == TIM2)
+	{
+		servo_tick++;
+		if(servo_tick >= 200)
+		{
+			servo_tick = 0;
+		}
+
+		//PA4 CH0
+		if(servo_tick < servo_pw[0])
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+		else
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+
+		//PA5 CH1
+		if(servo_tick < servo_pw[1])
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+		else
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+		//PA6 CH2
+		if(servo_tick < servo_pw[2])
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
+		else
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
+
+		//PA7 CH3 新增
+		if(servo_tick < servo_pw[3])
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+		else
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -89,8 +156,15 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_ADC1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_Init();
+  OLED_Init();
+  OLED_DrawFullImage(face_img);
+  PWM_Init();
+  Puppy_Stand();
+  Puppy_ShakeAss();
+  walk3sitdown();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -100,6 +174,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    
   }
   /* USER CODE END 3 */
 }
@@ -198,6 +273,51 @@ static void MX_ADC1_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 71;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 99;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -211,23 +331,29 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |RGB2_Pin|RGB1_Pin|KEY_Pin|OLED_SCL_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LED1_Pin|MUP_SDA_Pin|MUP_SCL_Pin|OLED_SDA_Pin
                           |OLED_DC_Pin|AHT20_SCL_Pin|AHT20_SDA_Pin|SR04_PB8_Pin
                           |SR04_PB9_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, RGB2_Pin|RGB1_Pin|KEY_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pins : PA4 PA5 PA6 PA7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LED1_Pin MUP_SDA_Pin MUP_SCL_Pin OLED_SDA_Pin
-                           OLED_DC_Pin AHT20_SCL_Pin AHT20_SDA_Pin SR04_PB8_Pin
-                           SR04_PB9_Pin */
-  GPIO_InitStruct.Pin = LED1_Pin|MUP_SDA_Pin|MUP_SCL_Pin|OLED_SDA_Pin
-                          |OLED_DC_Pin|AHT20_SCL_Pin|AHT20_SDA_Pin|SR04_PB8_Pin
-                          |SR04_PB9_Pin;
+  /*Configure GPIO pins : LED1_Pin MUP_SDA_Pin MUP_SCL_Pin OLED_DC_Pin
+                           AHT20_SCL_Pin AHT20_SDA_Pin SR04_PB8_Pin SR04_PB9_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin|MUP_SDA_Pin|MUP_SCL_Pin|OLED_DC_Pin
+                          |AHT20_SCL_Pin|AHT20_SDA_Pin|SR04_PB8_Pin|SR04_PB9_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -239,12 +365,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(MUP_INT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RGB2_Pin RGB1_Pin KEY_Pin */
-  GPIO_InitStruct.Pin = RGB2_Pin|RGB1_Pin|KEY_Pin;
+  /*Configure GPIO pin : RGB2_Pin */
+  GPIO_InitStruct.Pin = RGB2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(RGB2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : RGB1_Pin KEY_Pin OLED_SCL_Pin */
+  GPIO_InitStruct.Pin = RGB1_Pin|KEY_Pin|OLED_SCL_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : OLED_SDA_Pin */
+  GPIO_InitStruct.Pin = OLED_SDA_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(OLED_SDA_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : OLED_RES_Pin */
   GPIO_InitStruct.Pin = OLED_RES_Pin;

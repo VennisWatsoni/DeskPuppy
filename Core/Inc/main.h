@@ -31,11 +31,12 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+void PWM_Init(void);
+void Servo_SetAngle(uint8_t ch, uint8_t angle);
 
 /* USER CODE END ET */
 
@@ -73,6 +74,8 @@ void Error_Handler(void);
 #define RGB1_GPIO_Port GPIOA
 #define KEY_Pin GPIO_PIN_12
 #define KEY_GPIO_Port GPIOA
+#define OLED_SCL_Pin GPIO_PIN_15
+#define OLED_SCL_GPIO_Port GPIOA
 #define OLED_SDA_Pin GPIO_PIN_3
 #define OLED_SDA_GPIO_Port GPIOB
 #define OLED_RES_Pin GPIO_PIN_4
@@ -89,7 +92,10 @@ void Error_Handler(void);
 #define SR04_PB9_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+#define SERVO_CH0	0	// PA4
+#define SERVO_CH1	1	// PA5
+#define SERVO_CH2	2	// PA6
+#define SERVO_CH3	3	// PA7
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

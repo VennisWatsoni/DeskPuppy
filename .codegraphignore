@@ -1,0 +1,15 @@
+# STM32编译产物
+build/
+MDK-ARM/
+Debug/
+Release/
+*.o
+*.hex
+*.elf
+*.bin
+
+# 库与缓存
+Drivers/STM32F1xx_HAL_Driver/
+node_modules/
+.codegraph/
+.git/
