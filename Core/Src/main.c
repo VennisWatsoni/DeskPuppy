@@ -24,6 +24,9 @@
 #include "pose.h"
 #include "i2c.h"
 #include "oled.h"
+#include "mpu6050.h"
+#include <stdio.h>
+#include "aht20.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +34,16 @@
 TIM_HandleTypeDef htim2;
 static uint16_t servo_tick = 0;
 static uint16_t servo_pw[4] = {15,15,15,15};
-SoftIIC_HandleTypeDef si2c_OLED = {OLED_SDA_GPIO_Port, OLED_SDA_Pin, OLED_SCL_GPIO_Port, OLED_SCL_Pin};
+SoftIIC_HandleTypeDef si2c_mpu6050 = {MUP_SDA_GPIO_Port, MUP_SDA_Pin, MUP_SCL_GPIO_Port, MUP_SCL_Pin};
+MPU_DataTypeDef mpu_data;
+char oled_buf[24];
+uint8_t key_trig_flag = 0;
+uint32_t key_tick = 0;
+SoftIIC_HandleTypeDef si2c_aht20 = {AHT20_SDA_GPIO_Port, AHT20_SDA_Pin, AHT20_SCL_GPIO_Port, AHT20_SCL_Pin};
+AHT20_DataDef aht_data;
+char line0[32];
+char line1[32];
+uint8_t buf_dump[6];
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -124,6 +136,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
 	}
 }
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if(GPIO_Pin == GPIO_PIN_12)
+    {
+        key_trig_flag = 1; //仅仅置标记，不做任何耗时操作
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -160,11 +179,12 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_Init();
   OLED_Init();
-  OLED_DrawFullImage(face_img);
   PWM_Init();
   Puppy_Stand();
-  Puppy_ShakeAss();
-  walk3sitdown();
+  HAL_Delay(200);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12,1);
+  SoftIIC_Init(&si2c_aht20);
+  uint8_t aht_init_ret = AHT20_Init(&si2c_aht20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -174,7 +194,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    
+      if(key_trig_flag == 1)
+    {
+      HAL_Delay(50); //阻塞消抖，放在主循环
+      //再次读取PA12电平，确认按键仍然按下（低电平）
+      if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_12) == GPIO_PIN_RESET)
+      {
+        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_12); //翻转LED状态
+      }
+      key_trig_flag = 0; //清除标志，允许下次触发
+    }
+    uint8_t aht_read_ret = AHT20_ReadData(&si2c_aht20,&aht_data);
+    int16_t temp_int = (int16_t)(aht_data.temp * 10);
+    int16_t hum_int  = (int16_t)(aht_data.hum * 10);
+
+    sprintf(line0,"T:%d.%dC H:%d.%d%%", temp_int/10, temp_int%10, hum_int/10, hum_int%10);
+    sprintf(line1,"I:%d R:%d",aht_init_ret,aht_read_ret);
+
+    OLED_ClearShowString(0,0,line0);
+    OLED_ClearShowString(0,2,line1);
+
+    HAL_Delay(50); //放慢刷新，800ms切换一次，方便你读数
   }
   /* USER CODE END 3 */
 }
@@ -336,7 +376,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
-                          |RGB2_Pin|RGB1_Pin|KEY_Pin|OLED_SCL_Pin, GPIO_PIN_RESET);
+                          |RGB2_Pin|RGB1_Pin|OLED_SCL_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LED1_Pin|MUP_SDA_Pin|MUP_SCL_Pin|OLED_SDA_Pin
@@ -350,13 +390,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LED1_Pin MUP_SDA_Pin MUP_SCL_Pin OLED_DC_Pin
-                           AHT20_SCL_Pin AHT20_SDA_Pin SR04_PB8_Pin SR04_PB9_Pin */
-  GPIO_InitStruct.Pin = LED1_Pin|MUP_SDA_Pin|MUP_SCL_Pin|OLED_DC_Pin
-                          |AHT20_SCL_Pin|AHT20_SDA_Pin|SR04_PB8_Pin|SR04_PB9_Pin;
+  /*Configure GPIO pins : LED1_Pin OLED_DC_Pin AHT20_SCL_Pin AHT20_SDA_Pin
+                           SR04_PB8_Pin SR04_PB9_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin|OLED_DC_Pin|AHT20_SCL_Pin|AHT20_SDA_Pin
+                          |SR04_PB8_Pin|SR04_PB9_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : MUP_SDA_Pin MUP_SCL_Pin */
+  GPIO_InitStruct.Pin = MUP_SDA_Pin|MUP_SCL_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MUP_INT_Pin */
@@ -372,12 +419,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(RGB2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RGB1_Pin KEY_Pin OLED_SCL_Pin */
-  GPIO_InitStruct.Pin = RGB1_Pin|KEY_Pin|OLED_SCL_Pin;
+  /*Configure GPIO pins : RGB1_Pin OLED_SCL_Pin */
+  GPIO_InitStruct.Pin = RGB1_Pin|OLED_SCL_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : KEY_Pin */
+  GPIO_InitStruct.Pin = KEY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(KEY_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : OLED_SDA_Pin */
   GPIO_InitStruct.Pin = OLED_SDA_Pin;
@@ -390,6 +443,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = OLED_RES_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   HAL_GPIO_Init(OLED_RES_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 3, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

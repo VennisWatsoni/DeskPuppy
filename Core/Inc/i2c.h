@@ -7,9 +7,10 @@ typedef struct
 	GPIO_TypeDef *scl_port;
 	uint16_t      scl_pin;
 } SoftIIC_HandleTypeDef;
-extern SoftIIC_HandleTypeDef si2c_OLED;
-extern SoftIIC_HandleTypeDef hi2c_sw2;
+extern SoftIIC_HandleTypeDef si2c_mpu6050;
+extern SoftIIC_HandleTypeDef si2c_aht20;
 extern SoftIIC_HandleTypeDef hi2c_sw3;
+void SoftIIC_Delay_us(uint32_t t);
 void SoftIIC_Init(SoftIIC_HandleTypeDef *hi2c);
 void SoftIIC_Start(SoftIIC_HandleTypeDef *hi2c);
 void SoftIIC_Stop(SoftIIC_HandleTypeDef *hi2c);

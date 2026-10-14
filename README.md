@@ -12,4 +12,5 @@ OLED_SCL    PA15
 OLED_SDA    PB3
 OLED_DC     PB5
 OLED_RES    PB4
-
+### function 3: aht20
+si2c_aht20

@@ -74,6 +74,7 @@ void Error_Handler(void);
 #define RGB1_GPIO_Port GPIOA
 #define KEY_Pin GPIO_PIN_12
 #define KEY_GPIO_Port GPIOA
+#define KEY_EXTI_IRQn EXTI15_10_IRQn
 #define OLED_SCL_Pin GPIO_PIN_15
 #define OLED_SCL_GPIO_Port GPIOA
 #define OLED_SDA_Pin GPIO_PIN_3

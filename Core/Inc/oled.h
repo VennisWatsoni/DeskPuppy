@@ -27,8 +27,11 @@ void OLED_Write_Data(uint8_t data);
 void OLED_Init(void);
 void OLED_Clear(void);
 void OLED_SetPos(uint8_t x,uint8_t y);
-void OLED_ShowString(uint8_t x,uint8_t y,char *str,uint8_t fontsize);
+void OLED_ShowChar(uint8_t x,uint8_t y,char ch);
+void OLED_ShowString(uint8_t x,uint8_t y,char *str);
 void OLED_DrawFullImage(const uint8_t *img);
+void OLED_ClearLine(uint8_t page);
+void OLED_ClearShowString(uint8_t x,uint8_t y,char *str);
 
 
 #endif
