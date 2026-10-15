@@ -14,3 +14,9 @@ OLED_DC     PB5
 OLED_RES    PB4
 ### function 3: aht20
 si2c_aht20
+### function 4: uart2 
+USART2 115200 中断等级1
+DMA1 Channel6
+USART1 TX DMA1 CH4
+USART1 RX DMA1 CH5
+USART1 RX DMA1 CH6

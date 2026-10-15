@@ -27,23 +27,13 @@
 #include "mpu6050.h"
 #include <stdio.h>
 #include "aht20.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-TIM_HandleTypeDef htim2;
-static uint16_t servo_tick = 0;
-static uint16_t servo_pw[4] = {15,15,15,15};
-SoftIIC_HandleTypeDef si2c_mpu6050 = {MUP_SDA_GPIO_Port, MUP_SDA_Pin, MUP_SCL_GPIO_Port, MUP_SCL_Pin};
-MPU_DataTypeDef mpu_data;
-char oled_buf[24];
-uint8_t key_trig_flag = 0;
-uint32_t key_tick = 0;
 SoftIIC_HandleTypeDef si2c_aht20 = {AHT20_SDA_GPIO_Port, AHT20_SDA_Pin, AHT20_SCL_GPIO_Port, AHT20_SCL_Pin};
-AHT20_DataDef aht_data;
-char line0[32];
-char line1[32];
-uint8_t buf_dump[6];
+SoftIIC_HandleTypeDef si2c_mpu6050 = {MUP_SDA_GPIO_Port, MUP_SDA_Pin, MUP_SCL_GPIO_Port, MUP_SCL_Pin};
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -61,17 +51,77 @@ ADC_HandleTypeDef hadc1;
 
 TIM_HandleTypeDef htim2;
 
-/* USER CODE BEGIN PV */
+UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
+DMA_HandleTypeDef hdma_usart2_rx;
 
+/* USER CODE BEGIN PV */
+TIM_HandleTypeDef htim2;
+static uint16_t servo_tick = 0;
+static uint16_t servo_pw[4] = {15,15,15,15};
+MPU_DataTypeDef mpu_data;
+char oled_buf[24];
+uint8_t key_trig_flag = 0;
+uint32_t key_tick = 0;
+AHT20_DataDef aht_data;
+char line0[32];
+char line1[32];
+uint8_t buf_dump[6];
+uint8_t usart1_rx_buf[USART1_RX_MAX_LEN];
+uint16_t usart1_rx_len = 0;   // uint16_t
+uint8_t usart1_msg_ready = 0;
+
+uint8_t usart1_tx_buf[USART1_RX_MAX_LEN];
+uint8_t usart1_tx_busy = 0;
+
+uint8_t usart2_rx_buf[USART2_RX_MAX_LEN];
+uint16_t usart2_rx_len = 0;   // uint16_t
+uint8_t usart2_msg_ready = 0;
+
+
+int fputc(int ch, FILE *f)
+{
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 10);
+  return ch;
+}
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if(huart->Instance == USART1)
+  {
+    usart1_tx_busy = 0;
+  }
+}
 
+//USART1 DMA非阻塞发送函数
+void USART1_Send_DMA(char *str)
+{
+  if(str == NULL || usart1_tx_busy == 1)
+    return;
+
+  uint16_t len = strlen(str);
+  if(len >= sizeof(usart1_tx_buf))
+    len = sizeof(usart1_tx_buf)-1;
+
+  memcpy(usart1_tx_buf, str, len);
+  HAL_StatusTypeDef ret = HAL_UART_Transmit_DMA(&huart1, usart1_tx_buf, len);
+  if(ret == HAL_OK)
+  {
+    usart1_tx_busy = 1;
+  }
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -143,6 +193,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         key_trig_flag = 1; //仅仅置标记，不做任何耗时操作
     }
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -174,17 +225,28 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_USART2_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_Init();
   OLED_Init();
   PWM_Init();
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
+  HAL_UART_Receive_DMA(&huart1, usart1_rx_buf, 64);
+
+  __HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE);
+  HAL_UART_Receive_DMA(&huart2, usart2_rx_buf, 64);
+
   Puppy_Stand();
   HAL_Delay(200);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12,1);
   SoftIIC_Init(&si2c_aht20);
   uint8_t aht_init_ret = AHT20_Init(&si2c_aht20);
+  OLED_ClearShowString(0,0,"TEST");
+  HAL_Delay(1000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -194,7 +256,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      if(key_trig_flag == 1)
+    /*if(key_trig_flag == 1)
     {
       HAL_Delay(50); //阻塞消抖，放在主循环
       //再次读取PA12电平，确认按键仍然按下（低电平）
@@ -214,8 +276,33 @@ int main(void)
     OLED_ClearShowString(0,0,line0);
     OLED_ClearShowString(0,2,line1);
 
-    HAL_Delay(50); //放慢刷新，800ms切换一次，方便你读数
+    HAL_Delay(50); //放慢刷新，800ms切换一次，方便你读数*/
+    static uint32_t tick_cnt = 0;
+    if(HAL_GetTick() - tick_cnt > 1000)
+    {
+        tick_cnt = HAL_GetTick();
+        USART1_Send_DMA("DMA Test OK\r\n");
+    }
+    
+    // USART1收到数据：OLED显示 + 回显
+    if(usart1_msg_ready == 1)
+    {
+        OLED_Clear();
+        OLED_ShowString(0,0,(char*)usart1_rx_buf);
+        USART1_Send_DMA((char*)usart1_rx_buf);
+        usart1_msg_ready = 0;
+    }
+    
+    // USART2收到数据
+    if(usart2_msg_ready == 1)
+    {
+        OLED_Clear();
+        OLED_ShowString(0,0,(char*)usart2_rx_buf);
+        usart2_msg_ready = 0;
+    }
+
   }
+ 
   /* USER CODE END 3 */
 }
 
@@ -358,6 +445,94 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+  /* DMA1_Channel6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -445,7 +620,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(OLED_RES_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 3, 0);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 4, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */

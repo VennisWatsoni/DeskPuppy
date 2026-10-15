@@ -37,7 +37,7 @@ extern "C" {
 /* USER CODE BEGIN ET */
 void PWM_Init(void);
 void Servo_SetAngle(uint8_t ch, uint8_t angle);
-
+void USART1_Send_DMA(char *str);
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -97,6 +97,9 @@ void Error_Handler(void);
 #define SERVO_CH1	1	// PA5
 #define SERVO_CH2	2	// PA6
 #define SERVO_CH3	3	// PA7
+#define USART1_RX_MAX_LEN 64
+#define USART2_RX_MAX_LEN 64
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
