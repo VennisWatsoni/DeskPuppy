@@ -79,7 +79,8 @@ uint8_t usart1_tx_busy = 0;
 uint8_t usart2_rx_buf[USART2_RX_MAX_LEN];
 uint16_t usart2_rx_len = 0;   // uint16_t
 uint8_t usart2_msg_ready = 0;
-
+uint16_t adc_smoke_raw = 0;
+float adc_smoke_volt = 0.0f;
 
 int fputc(int ch, FILE *f)
 {
@@ -193,7 +194,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         key_trig_flag = 1; //仅仅置标记，不做任何耗时操作
     }
 }
-
+uint16_t ADC_Read_Smoke(void)
+{
+    HAL_ADC_Start(&hadc1);
+    HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+    uint16_t val = HAL_ADC_GetValue(&hadc1);
+    HAL_ADC_Stop(&hadc1);
+    return val;
+}
 /* USER CODE END 0 */
 
 /**
@@ -234,6 +242,7 @@ int main(void)
   HAL_Init();
   OLED_Init();
   PWM_Init();
+  HAL_ADC_Start(&hadc1); 
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
   HAL_UART_Receive_DMA(&huart1, usart1_rx_buf, 64);
 
@@ -256,7 +265,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /*if(key_trig_flag == 1)
+    if(key_trig_flag == 1)
     {
       HAL_Delay(50); //阻塞消抖，放在主循环
       //再次读取PA12电平，确认按键仍然按下（低电平）
@@ -271,13 +280,11 @@ int main(void)
     int16_t hum_int  = (int16_t)(aht_data.hum * 10);
 
     sprintf(line0,"T:%d.%dC H:%d.%d%%", temp_int/10, temp_int%10, hum_int/10, hum_int%10);
-    sprintf(line1,"I:%d R:%d",aht_init_ret,aht_read_ret);
 
-    OLED_ClearShowString(0,0,line0);
-    OLED_ClearShowString(0,2,line1);
+    OLED_ClearShowString(0,6,line0);
 
-    HAL_Delay(50); //放慢刷新，800ms切换一次，方便你读数*/
-    static uint32_t tick_cnt = 0;
+    HAL_Delay(50); //放慢刷新，800ms切换一次，方便你读数
+    /*static uint32_t tick_cnt = 0;
     if(HAL_GetTick() - tick_cnt > 1000)
     {
         tick_cnt = HAL_GetTick();
@@ -299,7 +306,21 @@ int main(void)
         OLED_Clear();
         OLED_ShowString(0,0,(char*)usart2_rx_buf);
         usart2_msg_ready = 0;
-    }
+    }*/
+        // 烟雾ADC采样，500ms一次
+    /*static uint32_t adc_tick = 0;
+    if(HAL_GetTick() - adc_tick > 500)
+    {
+        adc_tick = HAL_GetTick();
+        adc_smoke_raw = ADC_Read_Smoke();
+        adc_smoke_volt = adc_smoke_raw * 3.3f / 4095.0f;
+    
+        // OLED显示，放到第2行
+        char str[32];
+        int16_t volt_int = (int16_t)(adc_smoke_volt * 100);
+        sprintf(str,"SMOKE:%d %d.%02d V",adc_smoke_raw, volt_int/100, volt_int%100);
+        OLED_ClearShowString(0,4,str);
+    }*/
 
   }
  

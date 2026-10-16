@@ -38,6 +38,7 @@ extern "C" {
 void PWM_Init(void);
 void Servo_SetAngle(uint8_t ch, uint8_t angle);
 void USART1_Send_DMA(char *str);
+uint16_t ADC_Read_Smoke(void);
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -58,6 +59,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define MP2_Pin GPIO_PIN_0
+#define MP2_GPIO_Port GPIOA
 #define BATTERYVAL_PB0_Pin GPIO_PIN_0
 #define BATTERYVAL_PB0_GPIO_Port GPIOB
 #define LED1_Pin GPIO_PIN_12
